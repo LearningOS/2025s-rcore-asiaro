@@ -1,6 +1,6 @@
 //! Process management syscalls
 use crate::{
-    task::{exit_current_and_run_next, suspend_current_and_run_next},
+    task::{exit_current_and_run_next, suspend_current_and_run_next,get_current_syscall_count},
     timer::get_time_us,
 };
 
@@ -13,24 +13,7 @@ pub struct TimeVal {
 
 
 
-#[repr(usize)]
-#[derive(Debug, PartialEq)]
-pub enum TraceRequest {
-    /// 读取用户空间内存的一个字节
-    /// id参数被视为 *const u8
-    ReadMemory = 0,
-    
-    /// 写入用户空间内存的一个字节
-    /// id参数被视为 *mut u8，data的最低字节被写入
-    WriteMemory = 1,
-    
-    /// 查询系统调用统计
-    /// id参数指定要查询的系统调用号
-    QuerySyscall = 2,
-    
-    /// 无效请求
-    Invalid,
-}
+
 /// task exits and submit an exit code
 pub fn sys_exit(exit_code: i32) -> ! {
     trace!("[kernel] Application exited with code {}", exit_code);
@@ -63,25 +46,18 @@ pub fn sys_trace(_trace_request: usize, _id: usize, _data: usize) -> isize {
     // trace!("kernel: sys_trace");
     // -1
     match _trace_request{
-        TraceRequest::ReadMemory=>{
-            let addr =id as *const u8;
-            let byte=unsafe{*addr}
-            byte as isize
+        0=>{
+            unsafe { (_id as *const u8).read_volatile() as isize }
         }
-        TraceRequest::WriteMemory>{
-            let addr = id as *mut u8;
-            unsafe { *addr = data as u8 };
-                0
+        1=>{
+            unsafe { *(_id as *mut u8) = _data as u8 }
+            0
         }
-        TraceRequest::QuerySyscall => {
+        2 => {
             // 查询系统调用统计
-            if id <= MAX_SYSCALL_NUM {
-                task.syscall_count[id] as isize
-            } else {
-                -1
-            }
+            get_current_syscall_count(_id) as isize
         }
-        TraceRequest::Invalid => -1,
+        _ => -1,
 
     }
 
